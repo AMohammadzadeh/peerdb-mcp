@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -126,3 +127,61 @@ async def test_stdio_read_only(gateway):
             assert "Writes are disabled" in result.content[0].text
             assert calls == []
             assert not (await session.call_tool("list_pipelines", {})).isError
+
+
+async def test_local_smoke_summary_and_readonly(gateway):
+    url, calls = gateway
+    process = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-m",
+        "peerdb_mcp.smoke",
+        "--pipeline",
+        "orders",
+        env={
+            **os.environ,
+            "PEERDB_URL": url,
+            "PEERDB_READ_ONLY": "false",
+            "PEERDB_TOKEN": "test-private-token",
+        },
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=30)
+    assert process.returncode == 0, stderr.decode()
+    report = json.loads(stdout)
+    assert report["read_only"] is True
+    assert report["tool_count"] == 13
+    assert report["recent_error_count"] == 1
+    assert report["diagnostic_finding_count"] == 1
+    assert all(value == "passed" for value in report["checks"].values())
+    output = stdout.decode() + stderr.decode()
+    for sensitive in (url, "test-private-token", "orders", "connection timeout"):
+        assert sensitive not in output
+    assert all(
+        path
+        in {
+            "/v1/version",
+            "/v1/mirrors/list",
+            "/v1/mirrors/status",
+            "/v1/mirrors/logs",
+            "/v1/mirrors/cdc/batches",
+        }
+        for path, _ in calls
+    )
+
+
+async def test_local_smoke_failure_exit_code(gateway):
+    url, _ = gateway
+    process = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-m",
+        "peerdb_mcp.smoke",
+        env={**os.environ, "PEERDB_URL": url + "/wrong-gateway"},
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, _ = await asyncio.wait_for(process.communicate(), timeout=30)
+    assert process.returncode == 1
+    report = json.loads(stdout)
+    assert report["checks"]["get_peerdb_version"] == "failed"
+    assert report["checks"]["list_pipelines"] == "failed"

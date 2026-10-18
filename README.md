@@ -143,6 +143,25 @@ For live verification, configure the gateway and token, then call
 `get_peerdb_version`, `list_pipelines`, and `get_pipeline_status` for an existing
 pipeline through your MCP client. Test writes only against an intended test pipeline.
 
+### Test a local PeerDB instance
+
+Run this on the computer that can access PeerDB, from the project directory:
+
+```sh
+uv sync --frozen
+export PEERDB_URL=http://localhost:8113
+uv run --frozen python -m peerdb_mcp.smoke --pipeline YOUR_EXISTING_MIRROR
+```
+
+Inject `PEERDB_TOKEN` securely if your gateway requires it. Omit `--pipeline` to
+check only MCP startup, PeerDB version and pipeline listing. The test forces
+read-only mode, starts the real MCP server, and invokes tools through an MCP client.
+It prints a shareable JSON summary containing check results and counts, without
+URLs, credentials, pipeline names or log contents. Exit status is nonzero for failed
+or partial checks. A passing result verifies API access, not replication health;
+nonzero error/finding counts can include historical errors. This command works
+locally without exposing PeerDB to the cloud workspace.
+
 API mappings were checked against upstream PeerDB commit
 `3a20aa84f72b0b5357663fdd59513bd4f4f43ce6`:
 [REST routes](https://github.com/PeerDB-io/peerdb/blob/3a20aa84f72b0b5357663fdd59513bd4f4f43ce6/protos/route.proto),
