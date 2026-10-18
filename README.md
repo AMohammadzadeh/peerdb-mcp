@@ -78,15 +78,37 @@ To have your MCP client run this checkout, use an absolute project path:
 }
 ```
 
-Supply `PEERDB_TOKEN` through your client's secure environment/secret mechanism if
-your gateway requires an OAuth bearer token. Unauthenticated local deployments do
-not require it. This targets PeerDB's Flow API; it does not assume compatibility
+Supply credentials through your client's secure environment/secret mechanism:
+
+- **Bearer:** set `PEERDB_TOKEN`.
+- **HTTP Basic:** set both `PEERDB_USERNAME` and `PEERDB_PASSWORD` to non-empty values.
+- **Unauthenticated:** leave all three unset.
+
+Basic authentication works with gateways or reverse proxies configured to accept
+HTTP Basic. The server sends the standard `Authorization: Basic ...` header.
+For example, add these entries to your MCP client's `env` configuration, replacing
+the placeholders locally (prefer secure secret injection when supported):
+
+```json
+{
+  "PEERDB_URL": "https://peerdb.example.com",
+  "PEERDB_USERNAME": "YOUR_USERNAME",
+  "PEERDB_PASSWORD": "YOUR_PASSWORD"
+}
+```
+
+Set either a bearer token or Basic credentials; configuring both is rejected at
+startup. Basic usernames cannot contain `:`; passwords may contain it. Credentials
+must be separate environment variables, not embedded in `PEERDB_URL`.
+This targets PeerDB's Flow API; it does not assume compatibility
 with a separate managed-provider API or its authentication scheme.
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
 | `PEERDB_URL` | REST gateway origin, optionally with a proxy path prefix | Required |
 | `PEERDB_TOKEN` | Bearer token for the gateway | Unset |
+| `PEERDB_USERNAME` | HTTP Basic username; requires `PEERDB_PASSWORD` | Unset |
+| `PEERDB_PASSWORD` | HTTP Basic password; requires `PEERDB_USERNAME` | Unset |
 | `PEERDB_TIMEOUT_SECONDS` | Request timeout, greater than 0 and at most 300 | `30` |
 | `PEERDB_READ_ONLY` | Reject all create/pause/resume/update calls | `false` |
 
@@ -193,7 +215,8 @@ export PEERDB_URL=http://localhost:8113
 uv run --frozen python -m peerdb_mcp.smoke --pipeline YOUR_EXISTING_MIRROR
 ```
 
-Inject `PEERDB_TOKEN` securely if your gateway requires it. Omit `--pipeline` to
+Inject `PEERDB_TOKEN` or `PEERDB_USERNAME` and `PEERDB_PASSWORD` securely if your
+gateway requires authentication. Omit `--pipeline` to
 check only MCP startup, PeerDB version and pipeline listing. The test forces
 read-only mode, starts the real MCP server, and invokes tools through an MCP client.
 It prints a shareable JSON summary containing check results and counts, without

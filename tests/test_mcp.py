@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 import os
 import sys
@@ -11,8 +12,9 @@ from mcp.client.stdio import stdio_client
 
 
 @pytest.fixture
-def gateway():
+def gateway(request):
     calls = []
+    expected_auth = getattr(request, "param", {}).get("authorization")
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_):
@@ -26,6 +28,10 @@ def gateway():
 
         def respond(self, body):
             calls.append((self.path, body))
+            if expected_auth and self.headers.get("Authorization") != expected_auth:
+                self.send_response(401)
+                self.end_headers()
+                return
             responses = {
                 "/v1/version": {"version": "integration-test"},
                 "/v1/mirrors/list": {"mirrors": [{"name": "orders", "status": "STATUS_RUNNING"}]},
@@ -129,7 +135,18 @@ async def test_stdio_read_only(gateway):
             assert not (await session.call_tool("list_pipelines", {})).isError
 
 
-async def test_local_smoke_summary_and_readonly(gateway):
+@pytest.mark.parametrize(
+    "gateway,credentials",
+    [
+        ({"authorization": "Bearer test-private-token"}, {"PEERDB_TOKEN": "test-private-token"}),
+        (
+            {"authorization": "Basic " + base64.b64encode(b"local-user:local-password").decode()},
+            {"PEERDB_USERNAME": "local-user", "PEERDB_PASSWORD": "local-password"},
+        ),
+    ],
+    indirect=["gateway"],
+)
+async def test_local_smoke_summary_and_readonly(gateway, credentials):
     url, calls = gateway
     process = await asyncio.create_subprocess_exec(
         sys.executable,
@@ -141,7 +158,10 @@ async def test_local_smoke_summary_and_readonly(gateway):
             **os.environ,
             "PEERDB_URL": url,
             "PEERDB_READ_ONLY": "false",
-            "PEERDB_TOKEN": "test-private-token",
+            "PEERDB_TOKEN": "",
+            "PEERDB_USERNAME": "",
+            "PEERDB_PASSWORD": "",
+            **credentials,
         },
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
@@ -155,7 +175,7 @@ async def test_local_smoke_summary_and_readonly(gateway):
     assert report["diagnostic_finding_count"] == 1
     assert all(value == "passed" for value in report["checks"].values())
     output = stdout.decode() + stderr.decode()
-    for sensitive in (url, "test-private-token", "orders", "connection timeout"):
+    for sensitive in (url, *credentials.values(), "orders", "connection timeout"):
         assert sensitive not in output
     assert all(
         path

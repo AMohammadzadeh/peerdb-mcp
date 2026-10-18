@@ -1,7 +1,77 @@
+import base64
+
 import httpx
 import pytest
 
 from peerdb_mcp.client import PeerDBClient, PeerDBError, Settings
+
+
+async def test_basic_auth_and_secret_safe_errors():
+    username, password = "test-user", "test:password"
+    encoded = base64.b64encode(f"{username}:{password}".encode()).decode()
+
+    def handler(request):
+        assert request.headers["Authorization"] == f"Basic {encoded}"
+        return httpx.Response(401, text=f"Rejected {username}:{password} ({encoded})")
+
+    settings = Settings("https://example.test", username=username, password=password)
+    client = PeerDBClient(settings, httpx.MockTransport(handler))
+    try:
+        with pytest.raises(PeerDBError, match="PEERDB_USERNAME/PEERDB_PASSWORD") as error:
+            await client.request("GET", "/v1/version")
+        for secret in (username, password, encoded):
+            assert secret not in repr(settings)
+            assert secret not in str(error.value)
+    finally:
+        await client.close()
+
+
+@pytest.mark.parametrize(
+    "credentials",
+    [
+        {"username": "user"},
+        {"password": "password"},
+        {"username": "user", "password": ""},
+        {"username": "", "password": "password"},
+        {"username": "user", "password": "password", "token": "token"},
+        {"username": "user:name", "password": "password"},
+    ],
+)
+def test_invalid_auth_configuration(credentials):
+    with pytest.raises(ValueError):
+        Settings("https://example.test", **credentials)
+
+
+def test_basic_auth_from_environment(monkeypatch):
+    monkeypatch.setenv("PEERDB_URL", "https://example.test")
+    monkeypatch.delenv("PEERDB_TOKEN", raising=False)
+    monkeypatch.setenv("PEERDB_USERNAME", "user")
+    monkeypatch.setenv("PEERDB_PASSWORD", "password")
+    settings = Settings.from_env()
+    assert settings.username == "user"
+    assert settings.password == "password"
+    monkeypatch.setenv("PEERDB_TOKEN", "token")
+    with pytest.raises(ValueError, match="not both"):
+        Settings.from_env()
+
+
+async def test_basic_auth_does_not_follow_redirects():
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(302, headers={"Location": "https://other.test"})
+
+    client = PeerDBClient(
+        Settings("https://example.test", username="user", password="password"),
+        httpx.MockTransport(handler),
+    )
+    try:
+        with pytest.raises(PeerDBError, match="HTTP 302"):
+            await client.request("GET", "/v1/version")
+        assert len(requests) == 1
+    finally:
+        await client.close()
 
 
 async def test_auth_and_proxy_prefix():

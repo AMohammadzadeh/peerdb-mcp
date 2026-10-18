@@ -17,6 +17,8 @@ class Settings:
     token: str | None = field(default=None, repr=False)
     timeout: float = 30
     read_only: bool = False
+    username: str | None = field(default=None, repr=False)
+    password: str | None = field(default=None, repr=False)
 
     def __post_init__(self):
         parsed = urlsplit(self.url)
@@ -33,6 +35,13 @@ class Settings:
             )
         if not 0 < self.timeout <= 300:
             raise ValueError("PEERDB_TIMEOUT_SECONDS must be between 0 and 300")
+        basic_configured = self.username is not None or self.password is not None
+        if basic_configured and (not self.username or not self.password):
+            raise ValueError("Set both PEERDB_USERNAME and PEERDB_PASSWORD to non-empty values")
+        if self.token and basic_configured:
+            raise ValueError("Use PEERDB_TOKEN or Basic authentication, not both")
+        if self.username and ":" in self.username:
+            raise ValueError("PEERDB_USERNAME cannot contain a colon")
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -47,6 +56,8 @@ class Settings:
             token=os.environ.get("PEERDB_TOKEN") or None,
             timeout=float(os.environ.get("PEERDB_TIMEOUT_SECONDS", "30")),
             read_only=read_only == "true",
+            username=os.environ.get("PEERDB_USERNAME") or None,
+            password=os.environ.get("PEERDB_PASSWORD") or None,
         )
 
 
@@ -56,9 +67,13 @@ class PeerDBClient:
         headers = {"Accept": "application/json"}
         if settings.token:
             headers["Authorization"] = f"Bearer {settings.token}"
+        auth = None
+        if settings.username is not None and settings.password is not None:
+            auth = httpx.BasicAuth(settings.username, settings.password)
         self.http = httpx.AsyncClient(
             base_url=settings.url.rstrip("/") + "/",
             headers=headers,
+            auth=auth,
             timeout=settings.timeout,
             follow_redirects=False,
             transport=transport,
@@ -86,8 +101,8 @@ class PeerDBClient:
         if not response.is_success:
             hints = {
                 400: "Check the request and your PeerDB version's supported fields.",
-                401: "Check PEERDB_TOKEN and token expiry.",
-                403: "Check the token's access to this PeerDB instance.",
+                401: "Check PEERDB_TOKEN or PEERDB_USERNAME/PEERDB_PASSWORD credentials.",
+                403: "Check the configured credentials' access to this PeerDB instance.",
                 404: "Check the pipeline name and REST gateway URL.",
                 409: "Check current pipeline state before retrying.",
                 429: "PeerDB is rate limiting requests; retry later.",

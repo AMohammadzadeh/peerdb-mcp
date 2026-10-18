@@ -65,7 +65,10 @@ def main():
     try:
         report, code = asyncio.run(check(args.pipeline))
     except ValueError:
-        report, code = {"error": "Invalid configuration. Check PEERDB_URL and timeout settings."}, 1
+        report, code = (
+            {"error": "Invalid configuration. Check PEERDB_URL, authentication and timeout."},
+            1,
+        )
     except Exception:
         # Exception groups from the MCP transport may contain sensitive child output.
         report, code = (
