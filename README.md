@@ -7,13 +7,41 @@ Python SDK over stdio; no database access or additional service is required.
 
 ## Quick start
 
-Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
+Install [uv](https://docs.astral.sh/uv/) (which includes `uvx`) and Git, then add
+the configuration below to your MCP client. `uvx` installs the server from GitHub
+into an isolated environment and your client launches it automatically. No manual
+clone or virtual environment is needed. The server requires Python 3.11+; uv can
+download a compatible Python if needed.
+
+```json
+{
+  "mcpServers": {
+    "peerdb": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/AMohammadzadeh/peerdb-mcp.git@main",
+        "peerdb-mcp"
+      ],
+      "env": {
+        "PEERDB_URL": "http://localhost:8113"
+      }
+    }
+  }
+}
+```
+
+Restart your MCP client after saving its configuration. If it cannot find `uvx`,
+use the absolute path to the installed executable. Run the client on the computer
+that can access PeerDB: `localhost` refers to that computer. For a fixed server
+revision, replace `@main` with a full commit SHA. This installs from GitHub; the
+package is not currently published to PyPI.
+
+The equivalent terminal command is:
 
 ```sh
-uv sync --frozen
-export PEERDB_URL=http://localhost:8113
-# For an authenticated deployment, inject PEERDB_TOKEN securely.
-uv run --frozen peerdb-mcp
+PEERDB_URL=http://localhost:8113 uvx \
+  --from git+https://github.com/AMohammadzadeh/peerdb-mcp.git@main peerdb-mcp
 ```
 
 The process waits for an MCP client on stdin. It is not an HTTP server. Point
@@ -21,7 +49,19 @@ The process waits for an MCP client on stdin. It is not an HTTP server. Point
 8113 is the usual self-hosted gateway port; verify your deployment. HTTPS reverse
 proxy path prefixes are supported. TLS verification remains enabled.
 
-Example MCP client configuration (use an absolute project path):
+### Run from a local checkout
+
+For development, clone the repository and install its locked dependencies:
+
+```sh
+git clone https://github.com/AMohammadzadeh/peerdb-mcp.git
+cd peerdb-mcp
+uv sync --frozen
+export PEERDB_URL=http://localhost:8113
+uv run --frozen peerdb-mcp
+```
+
+To have your MCP client run this checkout, use an absolute project path:
 
 ```json
 {
