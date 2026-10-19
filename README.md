@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/AMohammadzadeh/peerdb-mcp/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/AMohammadzadeh/peerdb-mcp/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](pyproject.toml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 **Inspect replication pipelines, investigate sync errors, and manage CDC mirrors from your AI client.**
 
@@ -134,3 +135,7 @@ remove credentials and private data from anything you share.
 Bug fixes, compatibility reports, documentation improvements, and focused feature
 requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) for development
 commands and the API contract conventions.
+
+## License
+
+PeerDB MCP is available under the [MIT License](LICENSE).
